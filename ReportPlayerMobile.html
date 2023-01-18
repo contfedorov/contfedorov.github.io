@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1,user-scalable=no">
+    <title>Report Player</title>
+
+    <link rel="stylesheet" href="scripts/esri/themes/light/main.css" />
+    <link rel="stylesheet" href="scripts/geoenrichment/themes/report-player.css" />
+
+    <script>
+        var dojoConfig = dojoConfig || {};
+        dojoConfig.baseUrl = "scripts/dojo";
+
+    </script>
+    <script type="text/javascript" src="scripts/report-player.js"></script>
+
+    <style>
+        html,
+        body {
+            padding: 0;
+            margin: 0;
+            height: 100%;
+            overflow: hidden;
+            font-size: 13px;
+            font-family: "Avenir Next";
+        }
+
+        body {
+            background-color: #525659;
+        }
+
+    </style>
+
+    <script>
+        let player;
+
+        /*
+          params: {
+              componentId: string; // to identify this component, will be used in events
+
+              // configuration
+
+              server: string; // Portal URL, e.g. "https://www.arcgis.com/sharing"
+              userId: string; // E.g. "user_name"
+              token: string; // Portal token
+              geoenrichmentUrl: string // GeoenrichmentUrl (optional)
+              reportID: string; // Portal item id or alias
+              countryID: string; // e.g. "US"
+              hierarchy: string; // e.g. "census"
+
+              // areas
+
+              // if string is passed, it will be parsed to a JSON object; will be passed to the `analysisAreas` parameter of the player
+              analysisAreas: string | JSON object;
+              // if string is passed, it will be parsed to a JSON object; will be passed to the `sites` parameter of the player
+              sites: string | JSON object;
+              // if string is passed, it will be parsed to a JSON object; will be passed to the `combinedAreasInfo` parameter of the player
+              combinedAreasInfo: string | JSON object;
+              // if string is passed, it will be parsed to a JSON object; will be passed to the `attachmentsProvider` parameter of the player
+              attachmentsProvider: string | JSON object;
+              // fixed view mode of the player; if not passed, will be determined automatically
+
+              // view mode
+
+              viewMode: "full-pages" | "panels-in-slides" | "panels-in-stack" | "panels-in-stack-all";
+              fullPagesOnly: boolean; // the same as viewMode = "full-pages"
+
+              // toolbar
+
+              showHeader: boolean;
+              showCloseButton: boolean;
+              showFullscreenButton: boolean;
+              disableZoom: boolean;
+
+              // theme
+
+              theme: {
+                headerBackground: string; // header background color
+                headerText: string; // header text color
+                background: string; // background color
+              }
+
+              // export
+
+              exportOptions: {
+                print: boolean;
+                image: boolean;
+                pdf: boolean;
+                excel: boolean;
+                dynamicHtml: boolean;
+              }
+          }
+        */
+        function _runPlayer(params) {
+            const themeSettings = params.theme || {};
+
+            require([
+                    "geoenrichment/utils/WaitingUtil",
+                    "geoenrichment/widgets/utils/MessageUtil"
+                ],
+                (
+                    WaitingUtil,
+                    MessageUtil
+                ) => {
+                    WaitingUtil.showProgress(document.body, {
+                        backgroundColor: themeSettings.background || "#525659"
+                    });
+
+                    MessageUtil.loadGEMessages().then(() => {
+                        require([
+                                "geoenrichment/widgets/ReportPlayer/ReportPlayer"
+                            ],
+                            function (
+                                ReportPlayer
+                            ) {
+
+                                WaitingUtil.removeProgress(document.body);
+
+                                // prepare input parameters
+
+                                const width = params.width;
+                                const height = params.height;
+                                const maxWidth = params.maxWidth;
+                                const maxHeight = params.maxHeight;
+
+                                // ensure objects
+                                const analysisAreasJson = typeof params.analysisAreas === "string" ? JSON.parse(params
+                                        .analysisAreas) :
+                                    params.analysisAreas;
+                                const sitesJson = typeof params.sites === "string" ? JSON.parse(params.sites) : params.sites;
+                                const combinedAreasInfoJson = typeof params.combinedAreasInfo === "string" ? JSON.parse(params
+                                    .combinedAreasInfo) : params.combinedAreasInfo;
+                                const attachmentsProviderJson = typeof params.attachmentsProvider === "string" ? JSON.parse(
+                                    params
+                                        .attachmentsProvider) : params.attachmentsProvider;
+
+                                const exportOptions = params.exportOptions || {};
+                                const exportCommands = [];
+                                exportOptions.print && exportCommands.push("print");
+                                exportOptions.image && exportCommands.push("create-image");
+                                exportOptions.pdf && exportCommands.push("create-pdf");
+                                exportOptions.excel && exportCommands.push("create-excel");
+
+                                if (exportOptions.dynamicHtml) {
+                                    exportCommands.push("create-dynamic-html");
+                                    require([
+                                        "geoenrichment/widgets/ReportPlayerCore/export/commands/dynamic/BuildConfigurator"
+                                    ], (BuildConfigurator) => {
+                                        BuildConfigurator.configureDynamicHTMLToUseCustomBuild("latest");
+                                    });
+                                }
+
+                                player && player.destroy();
+                                player = new ReportPlayer({
+                                    exportCommands,
+                                    viewMode: params.viewMode || (params.fullPagesOnly ? "full-pages" : null /* auto */ ),
+                                    toolbarConfig: {
+                                        type: params.showHeader === false ? "none" : null,
+                                        showTitle: "report",
+                                        showCloseButton: params.showCloseButton !== false,
+                                        showFullscreenButton: params.showFullscreenButton,
+                                        disableZoom: params.disableZoom
+                                    },
+                                    themeSettings: {
+                                        toolbar: {
+                                            backgroundColor: themeSettings.headerBackground,
+                                            textStyle: {
+                                                color: themeSettings.headerText
+                                            }
+                                        },
+                                        backgroundColor: themeSettings.background
+                                    }
+                                }).placeAt(playerDiv);
+
+                                player.on("closed", () => {
+                                    if (window.dataProvider) {
+                                        // Android
+                                        window.dataProvider.closeViewer();
+                                    } else if (window.webkit && window.webkit.messageHandlers) {
+                                        // iOS
+                                        // important: pass non-null message
+                                        window.webkit.messageHandlers.closeViewerMessageHandler.postMessage({});
+                                    } else {
+                                        // Browser
+                                        window.close();
+                                    }
+                                });
+
+                                player.on("fullscreen-enter", () => {
+                                    const parent = window.opener || window.parent;
+                                    parent && parent.postMessage({
+                                        href: window.location.href,
+                                        action: "fullscreen-enter",
+                                        componentId: params.componentId
+                                    }, "*");
+                                });
+
+                                player.on("fullscreen-exit", () => {
+                                    const parent = window.opener || window.parent;
+                                    parent && parent.postMessage({
+                                        href: window.location.href,
+                                        action: "fullscreen-exit",
+                                        componentId: params.componentId
+                                    }, "*");
+                                });
+
+                                player.on("command-end", (result) => {
+                                    result.commandPromise.then((result) => {
+                                        const results = (Array.isArray(result) ? result : [result]);
+                                        Promise.all(results.map((r) => {
+                                            return r.data.text().then((blobAsText) => {
+                                                return {
+                                                    name: r.name,
+                                                    type: r.data.type,
+                                                    blob: r.data,
+                                                    text: blobAsText
+                                                };
+                                            });
+                                        })).then((results) => {
+                                            if (window.dataConsumer) {
+                                                // Android
+                                                window.dataConsumer.postData(results);
+
+                                                // fallback
+                                                if (window.dataConsumer.postData2) {
+                                                    results.forEach((r) => {
+                                                        window.dataConsumer.postData2(r.name, r.text, r.type);
+                                                    });
+                                                }
+                                            } else if (window.webkit && window.webkit.messageHandlers && window.webkit
+                                                .messageHandlers
+                                                .postDataMessageHandler) {
+                                                // iOS
+                                                window.webkit.messageHandlers.postDataMessageHandler.postMessage(results);
+
+                                                // fallback
+                                                if (window.webkit.messageHandlers.postDataMessageHandler2) {
+                                                    results.forEach((r) => {
+                                                        window.webkit.messageHandlers.postDataMessageHandler2.postMessage({
+                                                            name: r.name,
+                                                            text: r.text,
+                                                            type: r.type
+                                                        });
+                                                    });
+                                                }
+                                            }
+                                        });
+                                    });
+                                });
+
+                                if (params.dimensions)
+                                    player.resize(params.dimensions.w, params.dimensions.h);
+                                else if (width && height)
+                                    player.resize(Number(width), Number(height));
+
+                                if (params.constraints) {
+                                    player.setMaxWidth(params.constraints.maxWidth);
+                                    player.setMaxHeight(params.constraints.maxHeight);
+                                } else if (maxWidth || maxHeight) {
+                                    maxWidth && player.setMaxWidth(Number(maxWidth));
+                                    maxHeight && player.setMaxHeight(Number(maxHeight));
+                                }
+
+                                player.playReport({
+                                    portalUrl: params.server,
+                                    geoenrichmentUrl: params.geoenrichmentUrl,
+                                    countryID: params.countryID,
+                                    hierarchy: params.hierarchy,
+                                    reportID: params.reportID,
+                                    analysisAreas: analysisAreasJson,
+                                    sites: sitesJson,
+                                    combinedAreasInfo: combinedAreasInfoJson,
+                                    attachmentsProvider: attachmentsProviderJson
+                                });
+                            });
+                    });
+                });
+        }
+
+        function _runInfographics(params) {
+
+            function init() {
+                require([
+                        "esri4/identity/IdentityManager"
+                    ],
+                    function (
+                        esriId
+                    ) {
+                        esriId.registerToken({
+                            server: params.server,
+                            ssl: true, // set to true if ssl is required
+                            token: params.token,
+                            userId: params.userId,
+                            expires: Number.MAX_VALUE
+                        });
+
+                        _runPlayer(params);
+                    });
+            }
+
+            document.readyState === "complete" ? init() : document.onreadystatechange = () => document.readyState ==
+                "complete" && init();
+        }
+
+        // Android & Browser
+        window.onload = () => {
+            if (window.dataProvider) {
+                // Android
+                var paramsString = dataProvider.getInfographicParams();
+                var igParams = JSON.parse(paramsString);
+                setInfographicsParams(igParams);
+            } else {
+                // Browser
+                window.addEventListener("message", (event) => {
+                    var type = event.data && event.data.type;
+                    if (type === "infographic_parameters") {
+                        var igParamsString = event.data.infographicParameters;
+                        var igParams = JSON.parse(igParamsString);
+                        setInfographicsParams(igParams);
+                    }
+                });
+
+                if (window.opener) {
+                    window.opener.postMessage({
+                        href: window.location.href,
+                        status: "waiting_for_infographic_parameters"
+                    }, "*");
+                }
+            }
+        };
+
+        // iOS
+        // IMPORTANT: public interface, do not change the name of this function!
+        function setInfographicsParams(params) {
+            if (params.theme && params.theme.background) {
+                document.body.style.backgroundColor = params.theme.background;
+            }
+
+            setTimeout(() => _runInfographics(params), 1);
+        }
+
+    </script>
+</head>
+
+<body>
+<div id="playerDiv"></div>
+</body>
+
+</html>
