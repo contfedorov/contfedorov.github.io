@@ -240,7 +240,7 @@
                                                 // fallback
                                                 if (window.dataConsumer.postData2) {
                                                     results.forEach((r) => {
-                                                        window.dataConsumer.postData2(r.name, r.text, r.type);
+                                                        window.dataConsumer.postData2(r.name, r.text, r.type, r.base64String);
                                                     });
                                                 }
                                             } else if (window.webkit && window.webkit.messageHandlers && window.webkit
@@ -255,7 +255,8 @@
                                                         window.webkit.messageHandlers.postDataMessageHandler2.postMessage({
                                                             name: r.name,
                                                             text: r.text,
-                                                            type: r.type
+                                                            type: r.type,
+                                                            base64String: r.base64String
                                                         });
                                                     });
                                                 }
